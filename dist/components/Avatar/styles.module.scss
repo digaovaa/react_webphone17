@@ -1,0 +1,43 @@
+.avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    overflow: hidden;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #fff;
+    background-color: #ccc;
+  
+    &--small {
+      width: 32px;
+      height: 32px;
+      font-size: 0.75rem;
+    }
+  
+    &--medium {
+      width: 48px;
+      height: 48px;
+      font-size: 1rem;
+    }
+  
+    &--large {
+      width: 62px;
+      height: 62px;
+      font-size: 1.5rem;
+    }
+  
+    &__image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  
+    &__fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-transform: uppercase;
+    }
+  }
+  

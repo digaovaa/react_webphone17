@@ -1,0 +1,52 @@
+.webphone_wrapper {
+  width: 250px;
+}
+
+.draggable {
+  display: inline-block;
+  flex-direction: column;
+  width: 250px;
+  opacity: 0.9;
+  overflow: hidden;
+  height: 100%;
+
+  .header {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .header_phone_selector {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    color: lightgray;
+    cursor: pointer;
+    font-size: 13px;
+
+    &:hover {
+      color: white;
+    }
+  }
+}
+
+.button_float {
+  position: fixed;
+
+  &--top {
+    top: 25px;
+  }
+
+  &--bottom {
+    bottom: 25px;
+  }
+
+  &--left {
+    left: 25px;
+  }
+
+  &--right {
+    right: 25px;
+  }
+}

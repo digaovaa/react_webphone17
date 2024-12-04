@@ -1,0 +1,17 @@
+.draggable {
+    position: absolute;
+    width: 250px;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    cursor: grab;
+    user-select: none;
+    border-radius: 30px;
+  
+    &:active {
+      cursor: grabbing;
+    }
+}
+  

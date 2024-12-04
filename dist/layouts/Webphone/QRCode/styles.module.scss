@@ -1,0 +1,54 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.qrCodeBox {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 128px;
+  height: 128px;
+  background-color: white;
+}
+
+.spinnerBox {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.spinner {
+  border: 3px solid #e2e8f0; /* gray.200 */
+  border-top: 3px solid #4299e1; /* blue.500 */
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 0.5s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.title {
+  font-size: 1.125rem; /* lg */
+  color: white;
+  margin: 10px 0;
+}
+
+.instructions {
+  color: white;
+  font-size: 13px;
+  padding: 0 20px 10px 35px;
+  list-style-position: inside;
+}

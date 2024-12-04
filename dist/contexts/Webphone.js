@@ -1,0 +1,493 @@
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useWebphone = exports.WebPhoneProvider = exports.WebPhone = void 0;
+var _react = _interopRequireWildcard(require("react"));
+var _wavoipApi = _interopRequireDefault(require("wavoip-api"));
+var _libphonenumberJs = _interopRequireDefault(require("libphonenumber-js"));
+var _useSound = _interopRequireDefault(require("use-sound"));
+var _calling = _interopRequireDefault(require("../assets/sounds/calling.mp3"));
+var _ring = _interopRequireDefault(require("../assets/sounds/ring.mp3"));
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
+function _getRequireWildcardCache(e) { if ("function" != typeof WeakMap) return null; var r = new WeakMap(), t = new WeakMap(); return (_getRequireWildcardCache = function (e) { return e ? t : r; })(e); }
+function _interopRequireWildcard(e, r) { if (!r && e && e.__esModule) return e; if (null === e || "object" != typeof e && "function" != typeof e) return { default: e }; var t = _getRequireWildcardCache(r); if (t && t.has(e)) return t.get(e); var n = { __proto__: null }, a = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var u in e) if ("default" !== u && {}.hasOwnProperty.call(e, u)) { var i = a ? Object.getOwnPropertyDescriptor(e, u) : null; i && (i.get || i.set) ? Object.defineProperty(n, u, i) : n[u] = e[u]; } return n.default = e, t && t.set(e, n), n; }
+const WebPhone = exports.WebPhone = /*#__PURE__*/(0, _react.createContext)(null);
+const WebPhoneProvider = _ref => {
+  let {
+    children,
+    defaultConfig,
+    channels
+  } = _ref;
+  const screensState = {
+    AVAILABLE_SCREEN: 0,
+    CALL_SCREEN: 1,
+    CONNECTING_DEVICE: 2,
+    QRCODE_SCREEN: 3,
+    INCOMING_CALL_SCREEN: 4,
+    NO_INTERNET: 5,
+    TOKEN_INCORRECT: 6
+  };
+  const [config, setConfig] = (0, _react.useState)(defaultConfig);
+  const [token, setToken] = (0, _react.useState)("");
+  const [isOpen, setIsOpen] = (0, _react.useState)(true);
+  const [screenState, setScreenState] = (0, _react.useState)(screensState.AVAILABLE_SCREEN);
+  const [Wavoip, setWavoip] = (0, _react.useState)(null);
+  const [WavoipInstances, setWavoipIntances] = (0, _react.useState)({});
+  const [phoneInfos, setPhoneInfos] = (0, _react.useState)({});
+  const [callState, setCallState] = (0, _react.useState)(null);
+  const [callId, setCallId] = (0, _react.useState)(null);
+  const [tokenInCall, setTokenInCall] = (0, _react.useState)(null);
+  const [phone, setPhone] = (0, _react.useState)(null);
+  const [name, setName] = (0, _react.useState)(null);
+  const [device_status, setDeviceStatus] = (0, _react.useState)("connecting");
+  const [durationSeconds, setDurationSeconds] = (0, _react.useState)(0);
+  const [intervalCallDuration, setIntervalCallDuration] = (0, _react.useState)();
+  const [intervalTerminating, setIntervalTerminating] = (0, _react.useState)();
+  const [qrCode, setQRCode] = (0, _react.useState)("");
+  const [callError, setCallError] = (0, _react.useState)("");
+  const [isMuted, setIsMuted] = (0, _react.useState)(false);
+  const [profilePictureURL, setProfilePictureURL] = (0, _react.useState)("");
+  const [callStatus, setCallStatus] = (0, _react.useState)("");
+  const [selectedToken, setSelectedToken] = (0, _react.useState)(null);
+  const [playPhoneCalling, {
+    stop: stopPhoneCalling
+  }] = (0, _useSound.default)(_calling.default, {
+    volume: 0.4,
+    loop: true
+  });
+  const [playPhoneRinging, {
+    stop: stopPhoneRinging
+  }] = (0, _useSound.default)(_ring.default, {
+    volume: 1.0,
+    loop: true
+  });
+  const duration = () => {
+    const hours = Math.floor(durationSeconds / 3600);
+    const minutes = Math.floor(durationSeconds % 3600 / 60);
+    const seconds = durationSeconds % 60;
+    const formatTime = num => num < 10 ? `0${num}` : num;
+    return `${formatTime(hours)}:${formatTime(minutes)}:${formatTime(seconds)}`;
+  };
+  (0, _react.useEffect)(() => {
+    console.log("aqui");
+    const callStatus = () => {
+      switch (callState) {
+        case "offer":
+          playPhoneRinging();
+          setIsOpen(true);
+          return "Chamando...";
+        case "call-start":
+          playPhoneCalling();
+          return "Ligando...";
+        case "relaylatency":
+        case "preaccept":
+          return "Chamando...";
+        case "mute_v2":
+        case "accept":
+          stopPhoneRinging();
+          stopPhoneCalling();
+          return `${duration()}`;
+        case "accept_elsewhere":
+          stopPhoneRinging();
+          return "Aceito por outro usuário";
+        case "reject_elsewhere":
+          stopPhoneRinging();
+          return "Rejeitado por outro usuário";
+        case "reject":
+          stopPhoneRinging();
+          stopPhoneCalling();
+          return "Chamada rejeitada";
+        case "terminate":
+          stopPhoneRinging();
+          stopPhoneCalling();
+          return "Chamada finalizada";
+        default:
+          return "Status não identificado";
+      }
+    };
+    setCallStatus(callStatus());
+  }, [callState, durationSeconds]);
+  const resetStates = () => {
+    setIsMuted(false);
+    setCallState("");
+    setProfilePictureURL("");
+    setDurationSeconds(0);
+    clearInterval(intervalCallDuration);
+    setTokenInCall(null);
+    setCallId(null);
+  };
+  const getCurrentQRCode = () => {
+    Wavoip.getCurrentQRCode().then(qrcode => {
+      setQRCode(qrcode);
+    });
+  };
+  const getCurrentDeviceStatus = () => {
+    Wavoip.getCurrentDeviceStatus().then(status => {
+      setDeviceStatus(status);
+    });
+  };
+  const startDevice = async (token, canAcceptCall) => {
+    try {
+      setToken(token);
+      if (!selectedToken) {
+        setSelectedToken(token);
+      }
+      const Device = new _wavoipApi.default();
+      const WhatsappInstance = await Device.connect(token);
+
+      // WhatsappInstance?.socket?.on('connect', () => {
+      // });
+
+      // WhatsappInstance.socket.io.on("error", () => {
+      //   setScreenState(screensState.NO_INTERNET);
+      // });
+
+      setWavoip(WhatsappInstance);
+      let newWavoipInstances = WavoipInstances;
+      newWavoipInstances[token] = {
+        instance: WhatsappInstance,
+        canAcceptCall: canAcceptCall
+      };
+      setWavoipIntances({
+        ...newWavoipInstances
+      });
+    } catch (error) {
+      console.error("[*] - Error to start webphone", error);
+    }
+  };
+  const startCall = async function (phone) {
+    let token = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : null;
+    try {
+      var _parsePhoneNumber;
+      let tokens = Object.entries(WavoipInstances);
+      console.log(tokens, "tokens");
+      if (config.call.fallback) {
+        if (token) {
+          tokens = tokens.sort((a, b) => {
+            if (a[0] === token) return -1;
+            if (b[0] === token) return 1;
+            return 0;
+          });
+        }
+      } else {
+        if (!token) {
+          setCallError("Linha não específicada");
+        }
+        tokens = [token];
+      }
+      let phoneParsed = ((_parsePhoneNumber = (0, _libphonenumberJs.default)(`+${phone}`)) === null || _parsePhoneNumber === void 0 ? void 0 : _parsePhoneNumber.formatInternational()) || phone;
+      setPhone(phone);
+      setName(phoneParsed);
+      let error = [];
+      for (let [current_token, wavoip] of tokens) {
+        let isCalling = await (wavoip === null || wavoip === void 0 ? void 0 : wavoip.instance.callStart({
+          whatsappid: phone
+        }).then(response => {
+          if (response.type === "success") {
+            var _response$result, _response$result2;
+            error = [];
+            setCallState("call-start");
+            setCallId(response === null || response === void 0 ? void 0 : (_response$result = response.result) === null || _response$result === void 0 ? void 0 : _response$result.call_id);
+            setTokenInCall(current_token);
+            setScreenState(screensState.CALL_SCREEN);
+            setProfilePictureURL(response === null || response === void 0 ? void 0 : (_response$result2 = response.result) === null || _response$result2 === void 0 ? void 0 : _response$result2.profile_picture);
+            return true;
+          } else {
+            error.push(response === null || response === void 0 ? void 0 : response.result);
+            console.error("error call", current_token, response);
+          }
+        }).catch(response => {
+          console.error("error call", current_token, response);
+          error.push(response === null || response === void 0 ? void 0 : response.result);
+        }));
+        if (isCalling) {
+          break;
+        }
+      }
+
+      // setCallError(response?.result);
+    } catch (error) {
+      console.error("[*] - Error to start call", error);
+    }
+  };
+  const mute = async () => {
+    try {
+      var _WavoipInstances$toke;
+      let wavoip = (_WavoipInstances$toke = WavoipInstances[tokenInCall]) === null || _WavoipInstances$toke === void 0 ? void 0 : _WavoipInstances$toke.instance;
+      let response = await wavoip.mute();
+      setIsMuted(true);
+      return response;
+    } catch (error) {
+      console.error("[*] - Error to mute", error);
+    }
+  };
+  const unMute = async () => {
+    try {
+      var _WavoipInstances$toke2;
+      let wavoip = (_WavoipInstances$toke2 = WavoipInstances[tokenInCall]) === null || _WavoipInstances$toke2 === void 0 ? void 0 : _WavoipInstances$toke2.instance;
+      let response = await wavoip.unMute();
+      setIsMuted(false);
+      return response;
+    } catch (error) {
+      console.error("[*] - Error to unmute", error);
+    }
+  };
+  const endCall = async () => {
+    try {
+      var _WavoipInstances$toke3;
+      let wavoip = (_WavoipInstances$toke3 = WavoipInstances[tokenInCall]) === null || _WavoipInstances$toke3 === void 0 ? void 0 : _WavoipInstances$toke3.instance;
+      let response = await wavoip.endCall();
+      return response;
+    } catch (error) {
+      console.error("[*] - Error to end call", error);
+    }
+  };
+  const acceptCall = async () => {
+    try {
+      var _WavoipInstances$toke4;
+      let wavoip = (_WavoipInstances$toke4 = WavoipInstances[tokenInCall]) === null || _WavoipInstances$toke4 === void 0 ? void 0 : _WavoipInstances$toke4.instance;
+      let response = await wavoip.acceptCall();
+
+      // let response = await Wavoip.acceptCall();
+
+      setCallState("accept");
+      setScreenState(screensState.CALL_SCREEN);
+      return response;
+    } catch (error) {
+      console.error("[*] - Error to accept call", error);
+    }
+  };
+  const rejectCall = async () => {
+    try {
+      var _WavoipInstances$toke5;
+      let wavoip = (_WavoipInstances$toke5 = WavoipInstances[tokenInCall]) === null || _WavoipInstances$toke5 === void 0 ? void 0 : _WavoipInstances$toke5.instance;
+      let response = await wavoip.rejectCall();
+      stopPhoneRinging();
+      setScreenState(screensState.AVAILABLE_SCREEN);
+      resetStates();
+      return response;
+    } catch (error) {
+      console.error("[*] - Error to reject call", error);
+    }
+  };
+  const changeSelectedToken = () => {
+    const tokens = Object.keys(phoneInfos);
+    const currentIndex = tokens.findIndex(token => token == selectedToken);
+    const nextToken = currentIndex + 1;
+    if (nextToken < tokens.length) {
+      setSelectedToken(tokens[nextToken]);
+    } else {
+      setSelectedToken(tokens[0]);
+    }
+  };
+  (0, _react.useEffect)(() => {
+    console.log("aqui");
+    let tokens = Object.entries(WavoipInstances);
+    for (let [current_token, wavoip] of tokens) {
+      if (wavoip.instance) {
+        wavoip.instance.socket.off("signaling");
+        wavoip.instance.socket.off("device_status");
+        wavoip.instance.socket.off("qrcode");
+        wavoip.instance.socket.on("signaling", function () {
+          if (tokenInCall) {
+            if (current_token != tokenInCall) {
+              return;
+            }
+          }
+          const data = arguments.length <= 0 ? undefined : arguments[0];
+          if ((data === null || data === void 0 ? void 0 : data.tag) === "offer") {
+            var _data$content, _data$content2, _parsePhoneNumber2;
+            if (callId) {
+              return;
+            }
+            setCallId("incoming");
+            setTokenInCall(current_token);
+            const phone = data === null || data === void 0 ? void 0 : (_data$content = data.content) === null || _data$content === void 0 ? void 0 : _data$content.from_tag;
+            const profile_picture = data === null || data === void 0 ? void 0 : (_data$content2 = data.content) === null || _data$content2 === void 0 ? void 0 : _data$content2.profile_picture;
+            let phoneParsed = ((_parsePhoneNumber2 = (0, _libphonenumberJs.default)(`+${phone}`)) === null || _parsePhoneNumber2 === void 0 ? void 0 : _parsePhoneNumber2.formatInternational()) || phone;
+            setPhone(phone);
+            setName(phoneParsed);
+            setProfilePictureURL(profile_picture);
+          }
+          setCallState(data === null || data === void 0 ? void 0 : data.tag);
+        });
+        wavoip.instance.socket.on("device_status", data => {
+          if (selectedToken === current_token) {
+            setDeviceStatus(data);
+          }
+        });
+        wavoip.instance.socket.on("qrcode", data => {
+          if (selectedToken === current_token) {
+            setQRCode(data);
+          }
+        });
+        wavoip.instance.getAllInfo().then(response => {
+          console.log(response, current_token);
+          setPhoneInfos(oldPhoneInfos => ({
+            ...oldPhoneInfos,
+            [`${current_token}`]: {
+              ...((response === null || response === void 0 ? void 0 : response.result) || {})
+            }
+          }));
+        }).catch(response => {
+          console.error(response, "getAllInfo error");
+        });
+        getCurrentQRCode();
+        getCurrentDeviceStatus();
+      }
+    }
+  }, [WavoipInstances, callId, tokenInCall, selectedToken]);
+  (0, _react.useEffect)(() => {
+    console.log("aqui");
+    clearInterval(intervalTerminating);
+    switch (callState) {
+      case "offer":
+        setScreenState(screensState.INCOMING_CALL_SCREEN);
+        break;
+      case "accept_elsewhere":
+        if (screenState == screensState.INCOMING_CALL_SCREEN) {
+          let intervalAcceptElseWhere = setTimeout(() => {
+            setScreenState(screensState.AVAILABLE_SCREEN);
+            resetStates();
+          }, 2000);
+          setIntervalTerminating(intervalAcceptElseWhere);
+        }
+        break;
+      case "reject_elsewhere":
+        if (screenState == screensState.INCOMING_CALL_SCREEN) {
+          let intervalRejectElseWhere = setTimeout(() => {
+            setScreenState(screensState.AVAILABLE_SCREEN);
+            resetStates();
+          }, 2000);
+          setIntervalTerminating(intervalRejectElseWhere);
+        }
+        break;
+        break;
+      case "terminate":
+        let intervalTerminate = setTimeout(() => {
+          setScreenState(screensState.AVAILABLE_SCREEN);
+          resetStates();
+        }, 2500);
+        setIntervalTerminating(intervalTerminate);
+        clearInterval(intervalCallDuration);
+        break;
+      case "reject":
+        let intervalReject = setTimeout(() => {
+          setScreenState(screensState.AVAILABLE_SCREEN);
+          resetStates();
+        }, 2500);
+        setIntervalTerminating(intervalReject);
+        clearInterval(intervalCallDuration);
+        break;
+      case "relaylatency":
+      case "preaccept":
+        break;
+      case "accept":
+        setDurationSeconds(0);
+        const intervalId = setInterval(() => {
+          setDurationSeconds(seconds => seconds + 1);
+        }, 1000);
+        setIntervalCallDuration(intervalId);
+        break;
+    }
+  }, [callState]);
+  (0, _react.useEffect)(() => {
+    if (device_status === "connecting") {
+      setScreenState(screensState.QRCODE_SCREEN);
+    } else if (device_status === "open") {
+      setScreenState(screensState.AVAILABLE_SCREEN);
+    }
+  }, [device_status]);
+  (0, _react.useEffect)(() => {
+    var _phoneInfos$selectedT;
+    console.log("aqui");
+    let status = (_phoneInfos$selectedT = phoneInfos[selectedToken]) === null || _phoneInfos$selectedT === void 0 ? void 0 : _phoneInfos$selectedT.status;
+    if (status === "connecting") {
+      setScreenState(screensState.QRCODE_SCREEN);
+    } else if (status === "open") {
+      setScreenState(screensState.AVAILABLE_SCREEN);
+    }
+  }, [selectedToken]);
+  (0, _react.useEffect)(() => {
+    console.log("aqui");
+    window.wavoip_webphone = {
+      startDevice: startDevice,
+      startCall: startCall,
+      mute: mute,
+      unMute: unMute,
+      endCall: endCall,
+      acceptCall: acceptCall,
+      rejectCall: rejectCall,
+      setIsOpen: is_open => {
+        setIsOpen(is_open);
+        return is_open;
+      },
+      setConfig: config => {
+        setConfig({
+          ...defaultConfig,
+          ...config
+        });
+      }
+    };
+  }, [startDevice, startCall, mute, unMute, endCall, acceptCall, setIsOpen, setConfig]);
+  (0, _react.useEffect)(() => {
+    console.log("aqui");
+    channels.forEach(channel => {
+      if (!WavoipInstances[channel.token]) {
+        startDevice(channel.token);
+      }
+    });
+    let activeTokens = Object.keys(WavoipInstances);
+    activeTokens.forEach(active_token => {
+      if (!channels.includes(active_token)) {
+        var _WavoipInstances$acti, _WavoipInstances$acti2, _WavoipInstances$acti3;
+        let calldisconect = (_WavoipInstances$acti = WavoipInstances[active_token]) === null || _WavoipInstances$acti === void 0 ? void 0 : (_WavoipInstances$acti2 = _WavoipInstances$acti.instance) === null || _WavoipInstances$acti2 === void 0 ? void 0 : (_WavoipInstances$acti3 = _WavoipInstances$acti2.socket) === null || _WavoipInstances$acti3 === void 0 ? void 0 : _WavoipInstances$acti3.disconnect();
+        let newWavoipInstances = WavoipInstances;
+        delete newWavoipInstances[active_token];
+        setWavoipIntances({
+          ...newWavoipInstances
+        });
+      }
+    });
+  }, [channels]);
+  return /*#__PURE__*/_react.default.createElement(WebPhone.Provider, {
+    value: {
+      token,
+      config,
+      isOpen,
+      setIsOpen,
+      screensState,
+      screenState,
+      setScreenState,
+      duration,
+      callState,
+      startCall,
+      acceptCall,
+      rejectCall,
+      endCall,
+      mute,
+      unMute,
+      phone,
+      name,
+      callStatus,
+      qrCode,
+      callError,
+      isMuted,
+      profilePictureURL,
+      phoneInfos,
+      selectedToken,
+      changeSelectedToken
+    }
+  }, children);
+};
+exports.WebPhoneProvider = WebPhoneProvider;
+const useWebphone = () => {
+  const content = (0, _react.useContext)(WebPhone);
+  if (!content) {
+    throw new Error("Trying to use useCall but don't have a WebPhoneProvider");
+  }
+  return content;
+};
+exports.useWebphone = useWebphone;
