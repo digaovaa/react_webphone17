@@ -65,10 +65,6 @@ export const Draggable = ({ children }) => {
     else return Object.keys(phoneInfos).length > 1 ? "480px" : "430px";
   }
 
-  const getDefaultPosition = () => {
-    // let y = config.button.position_y === "top" ? 50 : - 
-  }
-
   const getBackground = () => {
 
     const background = config.background.gradient_color

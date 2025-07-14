@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
-import logo from './logo.svg';
-import './App.css';
+import React, { useState } from "react";
+
+import "./App.css";
 
 import { WebPhoneProvider } from "./contexts/Webphone";
 import { Webphone } from "./pages/Webphone";
